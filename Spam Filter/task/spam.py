@@ -18,17 +18,7 @@ def preprocess_text(txt):
     no_numbers = [w if not re.search(r"[0-9]{1,}", w) else string_number for w in no_punct.split()]
     no_stop = [w for w in no_numbers if w not in STOP_WORDS]
     words = [w for w in no_stop if len(w) >= 2]
-    '''
-    words = [token.lemma_ for token in doc]
-    for k in range(len(words)):
-        if words[k].isalpha():
-            pass
-        else:
-            words[k] = 'aanumbers'
-    lemmas = [w for w in words if not w in STOP_WORDS and not len(w) == 1]
-    '''
     return words
-
 
 def make_vocabulary(texts):
     all_words = set()
@@ -58,33 +48,33 @@ for i in df.index:
     df.loc[i, 'SMS'] = " ".join(lemmas)
 
 # splitting
-'''
-import numpy as np
-np.random.seed(43)
-random_index = np.random.permutation(df.index)
-df_two = df.iloc[random_index].copy()
-split = int(df_two.shape[0] * 0.8)
-train = df_two[:split].copy()
-test = df_two[split:].copy()
-'''
-
 df = df.sample(frac=1.0, random_state=43)
 train_last_index = int(df.shape[0] * 0.8)
 train_set = df[0:train_last_index]
 test_set = df[train_last_index:]
 
+# count spam and ham SMS
+target_counts = train_set['Target'].value_counts()
+nsms_ham = target_counts['ham']
+nsms_spam = target_counts['spam']
+p_ham = nsms_ham / (nsms_ham + nsms_spam)
+p_spam = nsms_spam / (nsms_ham + nsms_spam)
+
+# construct bag of words
 bow = bag_of_words(train_set['SMS'])
 data_with_bow = train_set.join(bow, how='outer')
 data_with_bow.reset_index(drop=True, inplace=True)
 
+# count occurrences of words in spam and ham
 word_counts = data_with_bow.groupby(['Target']).sum()
-print(word_counts)
+# print(word_counts)
 
 n_vocab = len(word_counts.columns)
 nwords_ham = word_counts.loc['ham', :].sum()
 nwords_spam = word_counts.loc['spam', :].sum()
 alpha = 1
 
+# calculate probabilities
 probabilities = {'Spam Probability': [], 'Ham Probability': []}
 for w in word_counts.columns:
     p_spam = (word_counts.loc['spam', w] + alpha) / (nwords_spam + alpha * n_vocab)
@@ -97,5 +87,44 @@ df_probabilities = pd.DataFrame(data=probabilities, index=word_counts.columns)
 # output
 pd.options.display.max_columns = 50
 pd.options.display.max_rows = 200
-print(df_probabilities.iloc[:200, :])
+# print(df_probabilities.iloc[:200, :])
+
+predictions = pd.Series(index=test_set.index, dtype='string')
+
+
+def predict(sms):
+    condp_ham = p_ham
+    condp_spam = p_spam
+    for w in sms.split():
+        if w in df_probabilities.index:
+            condp_ham *= df_probabilities.loc[w, 'Ham Probability']
+            condp_spam *= df_probabilities.loc[w, 'Spam Probability']
+    if condp_ham > condp_spam:
+        return 'ham'
+    elif condp_ham < condp_spam:
+        return 'spam'
+    return 'unknown'
+'''
+for i in test_set.index:
+    condp_ham = p_ham
+    condp_spam = p_spam
+    for w in test_set.loc[i, 'SMS'].split():
+        if w in df_probabilities.index:
+            condp_ham *= df_probabilities.loc[w, 'Ham Probability']
+            condp_spam *= df_probabilities.loc[w, 'Spam Probability']
+    if condp_ham > condp_spam:
+        predictions[i] = 'ham'
+    elif condp_ham < condp_spam:
+        predictions[i] = 'spam'
+    else:
+        predictions[i] = 'unknown'
+
+# print(predictions)
+'''
+df_predictions = test_set.copy()
+df_predictions['Predicted'] = df_predictions['Target'].apply(predict)
+df_predictions = df_predictions[['Predicted', 'Target']]
+df_predictions.columns = ['Predicted', 'Actual']
+print(df_predictions.iloc[:50, :])
+
 

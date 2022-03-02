@@ -125,6 +125,31 @@ df_predictions = test_set.copy()
 df_predictions['Predicted'] = df_predictions['Target'].apply(predict)
 df_predictions = df_predictions[['Predicted', 'Target']]
 df_predictions.columns = ['Predicted', 'Actual']
-print(df_predictions.iloc[:50, :])
+# print(df_predictions.iloc[:50, :])
+
+tp = 0
+fp = 0
+tn = 0
+fn = 0
+
+for i in df_predictions.index:
+    if df_predictions.loc[i, 'Predicted'] == 'spam':
+        if df_predictions.loc[i, 'Actual'] == 'spam':
+            tp +=1
+        elif df_predictions.loc[i, 'Actual'] == 'ham':
+            fp +=1
+    elif df_predictions.loc[i, 'Predicted'] == 'ham':
+        if df_predictions.loc[i, 'Actual'] == 'spam':
+            fn +=1
+        elif df_predictions.loc[i, 'Actual'] == 'ham':
+            tn +=1
+#print(tp, tn, fp, fn)
+metrics = {}
+metrics['Accuracy'] = (tp + tn) / (tp + fp + tn + fn)
+metrics['Recall'] = tp / (tp + fn)
+metrics['Precision'] = tp / (tp + fp)
+metrics['F1'] = 2 * metrics['Precision'] * metrics['Recall'] / (metrics['Precision'] + metrics['Recall'])
+
+print(metrics)
 
 

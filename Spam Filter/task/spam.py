@@ -1,9 +1,12 @@
 # write your code here
 import re
 import string
+import numpy as np
 import pandas as pd
 import spacy
 from spacy.lang.en.stop_words import STOP_WORDS
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 # pd.options.mode.chained_assignment = None
 en_sm_model = spacy.load("en_core_web_sm")
@@ -61,12 +64,45 @@ p_ham = nsms_ham / (nsms_ham + nsms_spam)
 p_spam = nsms_spam / (nsms_ham + nsms_spam)
 
 # construct bag of words
-bow = bag_of_words(train_set['SMS'])
-data_with_bow = train_set.join(bow, how='outer')
-data_with_bow.reset_index(drop=True, inplace=True)
+train_bow = bag_of_words(train_set['SMS'])
+train_data_with_bow = train_set.join(train_bow, how='outer')
+# train_data_with_bow.reset_index(drop=True, inplace=True)
+
+
+test_bow = bag_of_words(test_set['SMS'])
+test_data_with_bow = test_set.join(test_bow, how='outer')
+#test_data_with_bow.reset_index(drop=True, inplace=True)
+
+words = set(train_bow.columns).intersection(set(test_bow.columns))
+words = list(words)
+#print(words)
+
+#print(train_data_with_bow)
+#print(test_data_with_bow)
+
+class_mapping = {'ham': 0, 'spam': 1}
+X_train = np.array(train_data_with_bow.loc[:, words])
+y_train = np.array(train_data_with_bow['Target'].map(class_mapping))
+#print(X_train.shape, y_train.shape)
+X_test = np.array(test_data_with_bow.loc[:, words])
+y_test = test_data_with_bow['Target'].map(class_mapping)
+model = MultinomialNB()
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+metrics = {}
+metrics['Accuracy'] = accuracy_score(y_test, y_pred)
+metrics['Recall'] = recall_score(y_test, y_pred)
+metrics['Precision'] = precision_score(y_test, y_pred)
+metrics['F1'] = f1_score(y_test, y_pred)
+print(metrics)
+
+
+
+# And now implementation "by hand"
 
 # count occurrences of words in spam and ham
-word_counts = data_with_bow.groupby(['Target']).sum()
+word_counts = train_data_with_bow.groupby(['Target']).sum()
 # print(word_counts)
 
 n_vocab = len(word_counts.columns)
@@ -91,7 +127,6 @@ pd.options.display.max_rows = 200
 
 predictions = pd.Series(index=test_set.index, dtype='string')
 
-
 def predict(sms):
     condp_ham = p_ham
     condp_spam = p_spam
@@ -104,23 +139,7 @@ def predict(sms):
     elif condp_ham < condp_spam:
         return 'spam'
     return 'unknown'
-'''
-for i in test_set.index:
-    condp_ham = p_ham
-    condp_spam = p_spam
-    for w in test_set.loc[i, 'SMS'].split():
-        if w in df_probabilities.index:
-            condp_ham *= df_probabilities.loc[w, 'Ham Probability']
-            condp_spam *= df_probabilities.loc[w, 'Spam Probability']
-    if condp_ham > condp_spam:
-        predictions[i] = 'ham'
-    elif condp_ham < condp_spam:
-        predictions[i] = 'spam'
-    else:
-        predictions[i] = 'unknown'
 
-# print(predictions)
-'''
 df_predictions = test_set.copy()
 df_predictions['Predicted'] = df_predictions['Target'].apply(predict)
 df_predictions = df_predictions[['Predicted', 'Target']]
@@ -150,6 +169,6 @@ metrics['Recall'] = tp / (tp + fn)
 metrics['Precision'] = tp / (tp + fp)
 metrics['F1'] = 2 * metrics['Precision'] * metrics['Recall'] / (metrics['Precision'] + metrics['Recall'])
 
-print(metrics)
+# print(metrics)
 
 
